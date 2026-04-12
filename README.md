@@ -19,7 +19,7 @@ external_components:
 
 ## Wiring
 
-The MCP4151 uses a 3-wire SPI interface (CS, SCK, SDIO). The SDIO line is bidirectional — **connect a 330Ω resistor in series** between the microcontroller GPIO and MCP4151 pin 3.
+The MCP4151 uses a 3-wire SPI interface (CS, SCK, SDIO). The SDIO line is bidirectional — the component correctly switches the GPIO direction during each transaction. A **330Ω resistor in series** on the SDIO line is recommended as a safety margin against any timing overlap between the two drivers.
 
 | MCP4151 Pin | Signal | Connect to                        |
 |-------------|--------|-----------------------------------|

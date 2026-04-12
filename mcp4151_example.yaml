@@ -1,0 +1,39 @@
+esphome:
+  name: mcp4151-test
+  friendly_name: MCP4151 Digital Potentiometer
+
+esp8266:
+  board: d1_mini
+
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [mcp4151]
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+
+ota:
+  platform: esphome
+
+logger:
+  level: DEBUG
+
+output:
+  - platform: mcp4151
+    id: pot_output
+    # Important: connect a 330Ω resistor in series on the SDIO line (MCP4151 pin 3)
+    cs_pin: GPIO5    # D1 on Wemos D1 Mini  →  MCP4151 CS   (pin 1)
+    sck_pin: GPIO4   # D2 on Wemos D1 Mini  →  MCP4151 SCK  (pin 2)
+    sdio_pin: GPIO0  # D3 on Wemos D1 Mini  →  MCP4151 SDIO (pin 3) via 330Ω
+
+# Example: expose as a dimmable monochromatic light in Home Assistant
+light:
+  - platform: monochromatic
+    name: "Potentiometer Level"
+    output: pot_output
+    default_transition_length: 0s

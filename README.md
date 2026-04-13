@@ -19,13 +19,13 @@ external_components:
 
 ## Wiring
 
-The MCP4151 uses a 3-wire SPI interface (CS, SCK, SDIO). For write operations the SDIO line is driven entirely by the host — no direction switching is needed. A **330Ω resistor in series** on the SDIO line is optional but provides a safety margin against accidental shorts or ESD.
+The MCP4151 uses a 3-wire SPI interface (CS, SCK, SDIO). During each write the SDIO line briefly changes direction: the chip drives it for one clock cycle (the CMDERR status bit) while the host releases it, then the host reclaims it for the 9 data bits. A **330Ω series resistor** on the SDIO line is strongly recommended to protect against any residual drive overlap during these transitions.
 
 | MCP4151 Pin | Signal | Connect to                        |
 |-------------|--------|-----------------------------------|
 | 1           | CS     | GPIO (`cs_pin`)                   |
 | 2           | SCK    | GPIO (`sck_pin`)                  |
-| 3           | SDIO   | GPIO (`sdio_pin`) *(330Ω optional)* |
+| 3           | SDIO   | GPIO (`sdio_pin`) **via 330Ω**      |
 | 4           | VSS    | GND                               |
 | 5           | P0A    | One end of resistance element     |
 | 6           | P0W    | Wiper output                      |
@@ -40,7 +40,7 @@ output:
     id: pot_output
     cs_pin: GPIO5
     sck_pin: GPIO4
-    sdio_pin: GPIO0    # 330Ω series resistor optional but recommended
+    sdio_pin: GPIO0    # via 330Ω series resistor
 ```
 
 ### Options
@@ -49,7 +49,7 @@ output:
 |------------|----------|------------------------------|
 | `cs_pin`   | yes      | Chip select pin (active low) |
 | `sck_pin`  | yes      | Serial clock pin             |
-| `sdio_pin` | yes      | Serial data pin              |
+| `sdio_pin` | yes      | Serial data pin (via 330Ω)   |
 
 All standard ESPHome `output` options (`min_power`, `max_power`, `id`, etc.) are also supported.
 

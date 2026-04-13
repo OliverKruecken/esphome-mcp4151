@@ -22,8 +22,7 @@ class MCP4151Output : public output::FloatOutput, public Component {
 
  private:
   void set_wiper_(uint16_t value);
-  void write_bit_(bool bit, bool switch_to_input_after = false);
-  bool read_status_bit_();
+  void write_bit_(bool bit);
 
   GPIOPin *cs_pin_{nullptr};
   GPIOPin *sck_pin_{nullptr};

@@ -38,34 +38,37 @@ void MCP4151Output::write_bit_(bool bit, bool release_after) {
   delayMicroseconds(1);
   this->sck_pin_->digital_write(true);   // rising edge -- MCP4151 latches on this edge
   delayMicroseconds(1);
+  this->sck_pin_->digital_write(false);  // falling edge -- MCP4151 starts driving CMDERR here
   if (release_after) {
-    // Release SDIO (input + pull-up) while SCK is still HIGH, before the falling edge.
-    // Per the datasheet, MCP4151 starts driving SDIO (CMDERR) on the falling edge of C0.
-    // Being in input mode before that edge prevents a drive conflict.
+    // Release SDIO AFTER the falling edge of C0: the chip begins driving SDIO (CMDERR, open-drain)
+    // on that edge (datasheet §6.1.3). Releasing before would leave the line floating at the
+    // moment the chip takes over; releasing after ensures a clean handoff.
+    delayMicroseconds(1);
     this->sdio_pin_->pin_mode(gpio::FLAG_INPUT | gpio::FLAG_PULLUP);
   }
-  this->sck_pin_->digital_write(false);  // falling edge
 }
 
 bool MCP4151Output::read_cmderr_bit_() {
-  delayMicroseconds(1);
-  this->sck_pin_->digital_write(true);          // rising edge
+  // The chip has been driving SDIO since the falling edge of C0 — line is already settled.
+  // No setup delay needed before the rising edge.
+  this->sck_pin_->digital_write(true);          // rising edge -- sample CMDERR
   bool ok = this->sdio_pin_->digital_read();    // 1 = valid command, 0 = error
   delayMicroseconds(1);
-  this->sck_pin_->digital_write(false);         // falling edge -- MCP4151 stops driving SDIO here
-  // Reclaim SDIO as output only AFTER the falling edge, once the chip has released the line.
+  this->sck_pin_->digital_write(false);         // falling edge -- MCP4151 releases SDIO here
+  delayMicroseconds(1);
+  // Reclaim SDIO as output AFTER the falling edge, once the chip has released the line.
   this->sdio_pin_->pin_mode(gpio::FLAG_OUTPUT);
   return ok;
 }
 
 void MCP4151Output::set_wiper_(uint16_t value) {
-  // 16-bit SPI write command (MSB first, per MCP4151 datasheet section 7.5):
-  //   bits[15:12] = address  (0b0000  = volatile wiper 0)
-  //   bits[11:10] = opcode   (0b00    = write)
-  //   bit[9]      = CMDERR   (driven by MCP4151 on SDIO during this clock; host releases)
-  //   bits[8:0]   = 9-bit wiper data (0 = wiper at B, 256 = wiper at A)
-  // For address=0 and opcode=write=0 the command word equals the wiper value.
+  // 16-bit SPI write command (MSB first, per MCP4151 datasheet §7.5 / Figure 7-1):
+  //   bits[15:12] = address  (0b0000 = volatile wiper 0)
+  //   bits[11:10] = opcode   (0b00   = write)
+  //   bit[9]      = CMDERR   (MCP4151 drives this bit open-drain; host releases SDIO)
+  //   bits[8:0]   = 9-bit wiper data (D8:D0; 0x000 = wiper at B, 0x100 = wiper at A)
   uint16_t command = value & 0x01FFU;
+  ESP_LOGD(TAG, "set_wiper: value=%u command=0x%04X", value, command);
 
   this->cs_pin_->digital_write(false);  // assert CS (active low)
 
@@ -74,17 +77,17 @@ void MCP4151Output::set_wiper_(uint16_t value) {
     this->write_bit_((command >> i) & 1U);
   }
 
-  // Bit 10: opcode[0] (C0) -- write, then release SDIO so MCP4151 can drive CMDERR
-  // The chip switches SDIO to output on the falling edge of this clock (datasheet §6.1.3).
-  this->write_bit_((command >> 10) & 1U, true);
+  // Bit 10: opcode[0] (C0) -- after the falling edge the chip takes over SDIO for CMDERR
+  this->write_bit_((command >> 10) & 1U, /*release_after=*/true);
 
-  // Bit 9: CMDERR -- MCP4151 drives SDIO; read it, then reclaim line after falling edge
+  // Bit 9: CMDERR -- MCP4151 drives SDIO open-drain; read, then reclaim after falling edge
   bool ok = this->read_cmderr_bit_();
+  ESP_LOGD(TAG, "CMDERR=%s", ok ? "1 (valid)" : "0 (error)");
   if (!ok) {
-    ESP_LOGW(TAG, "MCP4151 reported a write error (CMDERR low) -- command ignored by device");
+    ESP_LOGW(TAG, "MCP4151 CMDERR=0: write command rejected by device");
   }
 
-  // Bits 8-0: 9-bit wiper data -- host drives again
+  // Bits 8-0: 9-bit wiper data (D8 first) -- host drives again
   for (int i = 8; i >= 0; i--) {
     this->write_bit_((command >> i) & 1U);
   }

@@ -14,6 +14,7 @@ class MCP4151Output : public output::FloatOutput, public PollingComponent {
   void set_sck_pin(GPIOPin *pin) { this->sck_pin_ = pin; }
   void set_sdio_pin(GPIOPin *pin) { this->sdio_pin_ = pin; }
   void set_sensor(sensor::Sensor *sensor) { this->sensor_ = sensor; }
+  void set_raw_values(bool v) { this->raw_values_ = v; }
 
   void setup() override;
   void update() override;
@@ -34,6 +35,7 @@ class MCP4151Output : public output::FloatOutput, public PollingComponent {
   GPIOPin *sck_pin_{nullptr};
   GPIOPin *sdio_pin_{nullptr};
   sensor::Sensor *sensor_{nullptr};
+  bool raw_values_{false};
 };
 
 }  // namespace mcp4151

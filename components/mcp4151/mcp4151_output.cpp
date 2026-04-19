@@ -23,6 +23,7 @@ void MCP4151Output::dump_config() {
   LOG_PIN("  SCK Pin:  ", this->sck_pin_);
   LOG_PIN("  SDIO Pin: ", this->sdio_pin_);
   LOG_UPDATE_INTERVAL(this);
+  ESP_LOGCONFIG(TAG, "  Raw values: %s", this->raw_values_ ? "yes" : "no");
   if (this->sensor_ != nullptr)
     LOG_SENSOR("  ", "Wiper Sensor", this->sensor_);
 }
@@ -31,12 +32,22 @@ void MCP4151Output::update() {
   if (this->sensor_ == nullptr)
     return;
   uint16_t wiper = this->read_wiper_();
-  this->sensor_->publish_state(wiper / 256.0f);
+  if (this->raw_values_) {
+    this->sensor_->publish_state(static_cast<float>(wiper));
+  } else {
+    this->sensor_->publish_state(wiper / 256.0f);
+  }
 }
 
 void MCP4151Output::write_state(float state) {
-  // Map [0.0, 1.0] to [0, 256] (257 discrete wiper positions)
-  auto value = static_cast<uint16_t>(state * 256.0f + 0.5f);
+  uint16_t value;
+  if (this->raw_values_) {
+    // Input is a raw wiper step in [0, 256]
+    value = static_cast<uint16_t>(state + 0.5f);
+  } else {
+    // Input is normalized [0.0, 1.0] → map to [0, 256]
+    value = static_cast<uint16_t>(state * 256.0f + 0.5f);
+  }
   if (value > 256)
     value = 256;
   ESP_LOGD(TAG, "Setting wiper to %u (state=%.3f)", value, state);

@@ -31,8 +31,9 @@ output:
     sck_pin: GPIO4   # D2 on Wemos D1 Mini  →  MCP4151 SCK  (pin 2)
     sdio_pin: GPIO0  # D3 on Wemos D1 Mini  →  MCP4151 SDIO (pin 3) via 330Ω
     update_interval: 30s  # how often to read back the wiper position
+    # raw_values: true   # uncomment to use native 0..256 steps for both read and write
     sensor:
-      name: "Wiper Position"  # publishes 0.0..1.0 (matches write interface)
+      name: "Wiper Position"  # publishes 0.0..1.0 (or 0..256 if raw_values: true)
 
 # Example: expose as a dimmable monochromatic light in Home Assistant
 light:

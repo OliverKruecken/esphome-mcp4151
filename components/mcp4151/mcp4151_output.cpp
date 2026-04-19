@@ -22,6 +22,16 @@ void MCP4151Output::dump_config() {
   LOG_PIN("  CS Pin:   ", this->cs_pin_);
   LOG_PIN("  SCK Pin:  ", this->sck_pin_);
   LOG_PIN("  SDIO Pin: ", this->sdio_pin_);
+  LOG_UPDATE_INTERVAL(this);
+  if (this->sensor_ != nullptr)
+    LOG_SENSOR("  ", "Wiper Sensor", this->sensor_);
+}
+
+void MCP4151Output::update() {
+  if (this->sensor_ == nullptr)
+    return;
+  uint16_t wiper = this->read_wiper_();
+  this->sensor_->publish_state(static_cast<float>(wiper));
 }
 
 void MCP4151Output::write_state(float state) {
@@ -56,6 +66,57 @@ bool MCP4151Output::read_cmderr_bit_() {
   // Reclaim SDIO as output only AFTER the falling edge, once the chip has released the line.
   this->sdio_pin_->pin_mode(gpio::FLAG_OUTPUT);
   return ok;
+}
+
+bool MCP4151Output::read_bit_() {
+  // Clock one bit in from the chip (chip drives SDIO, host only toggles SCK).
+  delayMicroseconds(1);
+  this->sck_pin_->digital_write(true);          // rising edge -- sample SDIO here
+  bool bit = this->sdio_pin_->digital_read();
+  delayMicroseconds(1);
+  this->sck_pin_->digital_write(false);         // falling edge
+  return bit;
+}
+
+uint16_t MCP4151Output::read_wiper_() {
+  // Read command (MCP4151 datasheet §7.6 / Figure 7-3):
+  //   bits[15:12] = 0b0000 (address: volatile wiper 0)
+  //   bits[11:10] = 0b11   (opcode: read)
+  //   bit[9]      = CMDERR  ← chip drives (1 = valid, 0 = error)
+  //   bits[8:0]   = 9-bit wiper value ← chip drives all 9 bits
+  static const uint16_t kReadCmd = 0x0C00U;  // 0b0000_1100_0000_0000
+
+  this->cs_pin_->digital_write(false);  // assert CS
+
+  // Send the 6-bit command header (bits 15..10).
+  // Bit 10 uses release_after=true: SDIO switches to INPUT+PULLUP while SCK is
+  // still HIGH, so the pin is already released when the falling edge hands the
+  // bus to the chip (same handoff timing as the write CMDERR sequence).
+  for (int i = 15; i >= 11; i--)
+    this->write_bit_((kReadCmd >> i) & 1U);
+  this->write_bit_((kReadCmd >> 10) & 1U, /*release_after=*/true);
+
+  // Read 10 bits MSB-first: bit 9 = CMDERR, bits 8:0 = wiper value.
+  // The chip drives SDIO for all 10 bits; host only clocks SCK.
+  uint16_t result = 0;
+  for (int i = 9; i >= 0; i--) {
+    if (this->read_bit_())
+      result |= (1U << i);
+  }
+
+  // Reclaim SDIO as output (idle low) once the chip has released the line.
+  this->sdio_pin_->pin_mode(gpio::FLAG_OUTPUT);
+  this->sdio_pin_->digital_write(false);
+
+  this->cs_pin_->digital_write(true);   // deassert CS
+
+  bool cmderr = (result >> 9) & 1U;
+  uint16_t wiper = result & 0x01FFU;
+  ESP_LOGD(TAG, "read_wiper: CMDERR=%u value=%u", cmderr, wiper);
+  if (!cmderr)
+    ESP_LOGW(TAG, "MCP4151 read: CMDERR=0 (command not accepted)");
+
+  return wiper;
 }
 
 void MCP4151Output::set_wiper_(uint16_t value) {

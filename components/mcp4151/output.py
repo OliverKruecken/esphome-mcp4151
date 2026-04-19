@@ -20,7 +20,7 @@ CONFIG_SCHEMA = (
             cv.Required(CONF_SDIO_PIN): pins.gpio_output_pin_schema,
             cv.Optional(CONF_SENSOR): sensor.sensor_schema(
                 unit_of_measurement="",
-                accuracy_decimals=0,
+                accuracy_decimals=3,
                 state_class=sensor.STATE_CLASS_MEASUREMENT,
             ),
         }

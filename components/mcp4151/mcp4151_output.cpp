@@ -31,7 +31,7 @@ void MCP4151Output::update() {
   if (this->sensor_ == nullptr)
     return;
   uint16_t wiper = this->read_wiper_();
-  this->sensor_->publish_state(static_cast<float>(wiper));
+  this->sensor_->publish_state(wiper / 256.0f);
 }
 
 void MCP4151Output::write_state(float state) {
